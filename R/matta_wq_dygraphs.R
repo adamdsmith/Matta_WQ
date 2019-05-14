@@ -72,4 +72,4 @@ wq_ts <- lapply(vars, function(v) {
 })
 
 all <- manipulateWidget::combineWidgets(list = wq_ts, ncol = 1)
-saveWidget(all, "Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
+saveWidget(all, "docs/Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
