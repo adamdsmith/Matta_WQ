@@ -30,18 +30,22 @@ lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx") %
            variable == "TURBIDITY"        ~ "turbidity",
            variable == "PHOSTOTP_LIQ"     ~ "TP",
            variable == "TKNN_LIQ"         ~ "TN",
+           variable == "NO2&NO3_LIQ"      ~ "TN",
            variable == "RESSUS_WET"       ~ "susp_res",
            variable == "CHLOROPHYLLA_LIQ" ~ "chla",
            TRUE                           ~ NA_character_)) %>%
   filter(!is.na(variable)) %>%
   # Coerce value column to numeric (some records had values like 'X3', etc.)
   mutate(value = as.numeric(value),
-         value = ifelse(variable == "TP", value * 1000, value)) # Convert TP to micrograms/L
+         # Convert TP to micrograms/L
+         value = ifelse(variable == "TP", value * 1000, value)) %>%
+  # Add multiple variables to get total N
+  group_by(date, basin, variable) %>%
+  summarise(value = sum(value, na.rm = TRUE))
 
 wq <- bind_rows(dwr, lab) %>%
   na.omit() %>%
   arrange(variable, basin, date)
-
 
 standards <- data.frame(variable = c("chla", "TN", "TP", "susp_res", "turbidity"),
                         axis = c("Chlorophyll<i><sub>a</sub></i><br>(&mu;g/L)",
@@ -72,4 +76,6 @@ wq_ts <- lapply(vars, function(v) {
 })
 
 all <- manipulateWidget::combineWidgets(list = wq_ts, ncol = 1)
-saveWidget(all, "docs/Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
+saveWidget(all, "Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
+file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_water_quality_dygraph.html")
+file.copy("./docs/Mattamuskeet_water_quality_dygraph.html", "./docs/index.html")
