@@ -61,13 +61,16 @@ vars <- unique(wq$variable)
 wq_ts <- lapply(vars, function(v) {
   message(v)
   std <- filter(standards, variable == v)
-  tmp <- filter(wq, variable == v) %>% tk_xts(tzone = "Etc/GMT+5") %>%
+  tmp <- filter(wq, variable == v) %>% tibble::rowid_to_column() %>%
+    spread(basin, value) %>% select(date, E:W) %>%
+    arrange(date, W, E) %>%  tk_xts(tzone = "Etc/GMT+5") %>%
     xts::make.time.unique(eps = 1800)
   init_window <- as.character(c(Sys.time() - years(5), Sys.time()))
   tmp_dy <- dygraph(tmp, group = "water_quality") %>%
-    dyOptions(colors = "black", axisLineWidth = 2, connectSeparatedPoints = FALSE, strokeWidth = 0) %>%
-    # dySeries("value", label = "SHITFIRE!", stemPlot = TRUE) %>%
-    dySeries("value", label = "Measurement", drawPoints = TRUE, pointSize = 4, pointShape = "square") %>%
+    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
+              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
+    dySeries("W", label = "West") %>%
+    dySeries("E", label = "East") %>%
     dyAxis("y", label = std$axis) %>%
     dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
     dyLegend(show = "follow", width = 200) %>%
