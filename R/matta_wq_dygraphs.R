@@ -43,9 +43,9 @@ lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx") %
   group_by(date, basin, variable) %>%
   summarise(value = sum(value, na.rm = TRUE))
 
-wq <- bind_rows(dwr, lab) %>%
-  na.omit() %>%
-  arrange(variable, basin, date)
+# Attempt to flag potentially problematic dates
+source("R/flag_observations.R")
+check_labs(new_lab)
 
 standards <- data.frame(variable = c("chla", "TN", "TP", "susp_res", "turbidity"),
                         axis = c("Chlorophyll<i><sub>a</sub></i><br>(&mu;g/L)",
