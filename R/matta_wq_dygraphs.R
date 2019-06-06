@@ -139,3 +139,33 @@ N_poi_dy <- lapply(N_poi, function(v) {
 N_poi_dy <- manipulateWidget::combineWidgets(list = N_poi_dy, ncol = 1)
 saveWidget(N_poi_dy, "Mattamuskeet_N_species_dygraph.html", title = "Mattamuskeet Water Quality - Nitrogen")
 file.rename("Mattamuskeet_N_species_dygraph.html", "./docs/Mattamuskeet_N_species_dygraph.html")
+
+###################################################
+## SEDIMENT SPECIES OF INTEREST
+###################################################
+
+sed_poi <-  c("res_susp_total", "res_susp_fixed", "res_susp_vol",
+              "res_total", "res_total_fixed", "res_total_vol")
+
+sed_poi_dy <- lapply(sed_poi, function(v) {
+  std <- filter(poi_standards, variable == v)
+  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup() %>%
+    spread(basin, !!v) %>% select(date, E:W) %>%
+    tk_xts(tzone = "Etc/GMT-5", select = c(W, E), date_var = date) %>%
+    xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
+  init_window <- as.character(c(as.POSIXct("2012-05-01 00:00:00"), Sys.time()))
+  tmp_dy <- dygraph(tmp, group = "water_quality") %>%
+    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
+              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
+    dySeries("W", label = "West") %>%
+    dySeries("E", label = "East") %>%
+    dyAxis("y", label = std$axis) %>%
+    dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
+    dyLegend(show = "follow", width = 200) %>%
+    dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
+    dyCSS("css/matta_wq.css")
+})
+
+sed_poi_dy <- manipulateWidget::combineWidgets(list = sed_poi_dy, ncol = 1)
+saveWidget(sed_poi_dy, "Mattamuskeet_sediment_species_dygraph.html", title = "Mattamuskeet Water Quality - Sediment")
+file.rename("Mattamuskeet_sediment_species_dygraph.html", "./docs/Mattamuskeet_sediment_species_dygraph.html")
