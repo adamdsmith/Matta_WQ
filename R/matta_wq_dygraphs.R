@@ -110,3 +110,32 @@ saveWidget(core_poi_dy, "Mattamuskeet_water_quality_dygraph.html", title = "Matt
 file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_water_quality_dygraph.html")
 file.remove("./docs/index.html")
 file.copy("./docs/Mattamuskeet_water_quality_dygraph.html", "./docs/index.html")
+
+###################################################
+## NITROGEN SPECIES OF INTEREST
+###################################################
+
+N_poi <- c("NH3", "NOx", "TKN", "TN")
+
+N_poi_dy <- lapply(N_poi, function(v) {
+  std <- filter(poi_standards, variable == v)
+  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup() %>%
+    spread(basin, !!v) %>% select(date, E:W) %>%
+    tk_xts(tzone = "Etc/GMT-5", select = c(W, E), date_var = date) %>%
+    xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
+  init_window <- as.character(c(as.POSIXct("2012-05-01 00:00:00"), Sys.time()))
+  tmp_dy <- dygraph(tmp, group = "water_quality") %>%
+    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
+              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
+    dySeries("W", label = "West") %>%
+    dySeries("E", label = "East") %>%
+    dyAxis("y", label = std$axis) %>%
+    dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
+    dyLegend(show = "follow", width = 200) %>%
+    dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
+    dyCSS("css/matta_wq.css")
+})
+
+N_poi_dy <- manipulateWidget::combineWidgets(list = N_poi_dy, ncol = 1)
+saveWidget(N_poi_dy, "Mattamuskeet_N_species_dygraph.html", title = "Mattamuskeet Water Quality - Nitrogen")
+file.rename("Mattamuskeet_N_species_dygraph.html", "./docs/Mattamuskeet_N_species_dygraph.html")
