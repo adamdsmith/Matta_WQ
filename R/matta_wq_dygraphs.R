@@ -56,18 +56,22 @@ source("R/flag_observations.R")
 check_labs(new_lab)
 
 wq <- bind_rows(old, new_lab) %>%
+  mutate(NP_mass = TN / (TP / 1000),
+         NP_molar = mgL_M(TN, 14.0067) / mgL_M(TP/1000, 30.973762)) %>%
   arrange(date, basin)
 
 # Create standards and/or label data.frame
 poi_standards <- data.frame(
-  variable = c("chla", "TN", "TP", "res_susp_total", "turbidity",
-               "TKN", "NH3", "NOx", "res_susp_vol", "res_susp_fixed",
+  variable = c("chla", "TN", "TP", "res_susp_total", "turbidity", "NP_mass",
+               "NP_molar", "TKN", "NH3", "NOx", "res_susp_vol", "res_susp_fixed",
                "res_total", "res_total_vol", "res_total_fixed"),
   axis = c("Chlorophyll<i><sub>a</sub></i><br>(&mu;g/L)",
            "Total nitrogen<br>(mg/L)",
            "Total phosphorus<br>(&mu;g/L)",
            "Susp. solids - total<br>(mg/L)",
            "Turbidity<br>(NTUs)",
+           "N:P ratio<br>(mass)",
+           "N:P ratio<br>(molar)",
            "Total Kjeldahl nitrogen<br>(mg/L)",
            "Ammonia<br>(mg/L)",
            "Nitrites/Nitrates<br>(mg/L)",
@@ -76,8 +80,8 @@ poi_standards <- data.frame(
            "Solids - total<br>(mg/L)",
            "Solids - total volatile<br>(mg/L)",
            "Solids - total fixed<br>(mg/L)"),
-  min = c(0, 0.32, 8, 0, 0, rep(NA, 8)),
-  max = c(40, 0.41, 20, 15, 25, rep(NA, 8)),
+  min = c(0, 0.32, 8, 0, 0, 7.2, 16, rep(NA, 8)),
+  max = c(40, 0.41, 20, 15, 25, 7.2, 16, rep(NA, 8)),
   stringsAsFactors = FALSE)
 
 ###################################################
@@ -115,7 +119,7 @@ file.copy("./docs/Mattamuskeet_water_quality_dygraph.html", "./docs/index.html")
 ## NITROGEN SPECIES OF INTEREST
 ###################################################
 
-N_poi <- c("NH3", "NOx", "TKN", "TN")
+N_poi <- c("NH3", "NOx", "TKN", "TN", "NP_molar")
 
 N_poi_dy <- lapply(N_poi, function(v) {
   std <- filter(poi_standards, variable == v)
