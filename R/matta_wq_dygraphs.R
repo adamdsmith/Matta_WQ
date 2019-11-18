@@ -151,9 +151,6 @@ wq_core_dy <- lapply(core_poi, function(v) {
 
 core_poi_dy <- manipulateWidget::combineWidgets(list = wq_core_dy, ncol = 1)
 saveWidget(core_poi_dy, "Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
-file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_water_quality_dygraph.html")
-file.remove("./docs/index.html")
-file.copy("./docs/Mattamuskeet_water_quality_dygraph.html", "./docs/index.html")
 
 ###################################################
 ## NITROGEN SPECIES OF INTEREST
