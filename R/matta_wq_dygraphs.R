@@ -4,6 +4,10 @@ if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
 if (!requireNamespace("nrsmisc", quietly = TRUE)) devtools::install_github("adamdsmith/nrsmisc")
 pacman::p_load(ggplot2, viridis, readr, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
                htmlwidgets, manipulateWidget)
+
+source("R/mass_to_moles.R")
+source("R/flag_observations.R")
+
 adj_lt <- function(x, na.rm = FALSE) {
   if (is.numeric(x)) return(x)
   has_lt <- grepl("<", x)
@@ -52,7 +56,6 @@ new_lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx
          TP = PHOSTOTP_LIQ, turbidity = TURBIDITY, rep)
 
 # Attempt to flag potentially problematic dates
-source("R/flag_observations.R")
 check_labs(new_lab)
 
 wq <- bind_rows(old, new_lab) %>%
@@ -92,16 +95,53 @@ core_poi <- c("turbidity", "TP", "TN", "res_susp_total", "chla")
 
 wq_core_dy <- lapply(core_poi, function(v) {
   std <- filter(poi_standards, variable == v)
-  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup() %>%
+  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
+
+  # Loess calculation
+  # Restrict to last 5 years of data
+  date_cutoff <- max(tmp$date) - as.difftime(5 * 365, units = "days")
+  l_tmp <- filter(tmp, !is.na(!!sym(v)),
+                  date >= date_cutoff) %>%
+    group_by(date, basin) %>%
+    summarize(!!v := mean(!!sym(v)))
+  t_range <- as.integer(difftime(max(l_tmp$date), min(l_tmp$date), units = "days"))
+  # Use last 1.5 years for smoothing
+  n_yrs_for_loess <- 1.5
+  t_span <- (n_yrs_for_loess * 365) / t_range
+  basins <- c("E", "W")
+  loess_dat <- lapply(basins, function(b) {
+    form <- as.formula(paste(v, "~ t"))
+    b_dat <- filter(l_tmp, basin == b) %>%
+      mutate(t = as.numeric(date))
+    l_b <- loess(form, data = b_dat, span = t_span)
+
+    toi <- as.numeric(seq.POSIXt(date_cutoff - as.difftime(30, units = "mins"),
+                                 by = "month", length.out = 60))
+    out <- data.frame(t = toi,
+                      date = as_datetime(toi, tz = "Etc/GMT-5"),
+                      pred = predict(l_b, newdata = data.frame(t = toi)))
+    out
+  })
+  names(loess_dat) <- paste0(basins, "_loess")
+  loess_ts <- bind_rows(loess_dat, .id = "basin") %>%
+    spread(basin, pred) %>%
+    select(-t)
+
+  tmp <- tmp %>%
     spread(basin, !!v) %>% select(date, E:W) %>%
-    tk_xts(tzone = "Etc/GMT-5", select = c(W, E), date_var = date) %>%
+    bind_rows(loess_ts) %>%
+    tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
     xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
-  init_window <- as.character(c(Sys.time() - years(5), Sys.time()))
+  init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
   tmp_dy <- dygraph(tmp, group = "water_quality") %>%
-    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
-              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
-    dySeries("W", label = "West") %>%
-    dySeries("E", label = "East") %>%
+    dyOptions(colors = c("#b2182b", "#b2182b", "#2166ac", "#2166ac"),
+              axisLineWidth = 2, connectSeparatedPoints = TRUE) %>%
+    dySeries("W", label = "West", drawPoints = TRUE, pointSize = 3, pointShape = "square",
+             strokeWidth = 0) %>%
+    dySeries("W_loess", drawPoints = FALSE) %>%
+    dySeries("E", label = "East", drawPoints = TRUE, pointSize = 3, pointShape = "square",
+             strokeWidth = 0) %>%
+    dySeries("E_loess", drawPoints = FALSE) %>%
     dyAxis("y", label = std$axis) %>%
     dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
     dyLegend(show = "follow", width = 200) %>%
