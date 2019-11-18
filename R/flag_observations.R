@@ -5,6 +5,6 @@ check_labs <- function(lab_dat) {
     warning("At least one date has multiple replicates for a given basin.\n",
             "Basins typically have a single grab sample on a given date.\n",
             "See the table above for dates inconsistent with that expectation", call. = FALSE)
-    return(check_me)
   }
+  return(check_me)
 }
