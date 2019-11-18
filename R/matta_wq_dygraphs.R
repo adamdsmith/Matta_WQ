@@ -5,16 +5,10 @@ if (!requireNamespace("nrsmisc", quietly = TRUE)) devtools::install_github("adam
 pacman::p_load(ggplot2, viridis, readr, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
                htmlwidgets, manipulateWidget)
 
-source("R/mass_to_moles.R")
-source("R/flag_observations.R")
+source("R/utils.R")
+source("R/construct_loess.R")
+source("R/wq_dygraph.R")
 
-adj_lt <- function(x, na.rm = FALSE) {
-  if (is.numeric(x)) return(x)
-  has_lt <- grepl("<", x)
-  mod_x <- as.numeric(gsub("<", "", x))
-  mod_x <- mod_x * (1 - (0.5 * has_lt))
-  mod_x
-}
 # Water quality metrics from grab samples at USGS gages on Lake Mattamuskeet NWR.
 
 # Historic samples (1981 - 2017)
@@ -56,14 +50,17 @@ new_lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx
          TP = PHOSTOTP_LIQ, turbidity = TURBIDITY, rep)
 
 # Attempt to flag potentially problematic dates
+# An "empty" data frame result is good
 check_labs(new_lab)
 
+# Calculate N:P ratios by mass and molarity
 wq <- bind_rows(old, new_lab) %>%
   mutate(NP_mass = TN / (TP / 1000),
          NP_molar = mgL_M(TN, 14.0067) / mgL_M(TP/1000, 30.973762)) %>%
   arrange(date, basin)
 
 # Create standards and/or label data.frame
+# Note the "fudge factor" on the N:P ratios to make them appear in the dygraphs
 poi_standards <- data.frame(
   variable = c("chla", "TN", "TP", "res_susp_total", "turbidity", "NP_mass",
                "NP_molar", "TKN", "NH3", "NOx", "res_susp_vol", "res_susp_fixed",
@@ -83,9 +80,12 @@ poi_standards <- data.frame(
            "Solids - total<br>(mg/L)",
            "Solids - total volatile<br>(mg/L)",
            "Solids - total fixed<br>(mg/L)"),
-  min = c(0, 0.32, 8, 0, 0, 7.2, 16, rep(NA, 8)),
-  max = c(40, 0.41, 20, 15, 25, 7.2, 16, rep(NA, 8)),
+  min = c(0, 0.32, 8, 0, 0, 7.15, 15.95, rep(NA, 8)),
+  max = c(40, 0.41, 20, 15, 25, 7.25, 16.05, rep(NA, 8)),
   stringsAsFactors = FALSE)
+
+# Set initial window of all dygraphs
+init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
 
 ###################################################
 ## CORE WATER QUALITY PARAMETERS OF INTEREST (POI)
@@ -93,64 +93,26 @@ poi_standards <- data.frame(
 
 core_poi <- c("turbidity", "TP", "TN", "res_susp_total", "chla")
 
-wq_core_dy <- lapply(core_poi, function(v) {
+core_poi_dy <- lapply(core_poi, function(v) {
   std <- filter(poi_standards, variable == v)
   tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
 
-  # Loess calculation
-  # Restrict to last 5 years of data
-  date_cutoff <- max(tmp$date) - as.difftime(5 * 365, units = "days")
-  l_tmp <- filter(tmp, !is.na(!!sym(v)),
-                  date >= date_cutoff) %>%
-    group_by(date, basin) %>%
-    summarize(!!v := mean(!!sym(v)))
-  t_range <- as.integer(difftime(max(l_tmp$date), min(l_tmp$date), units = "days"))
-  # Use last 1.5 years for smoothing
-  n_yrs_for_loess <- 1.5
-  t_span <- (n_yrs_for_loess * 365) / t_range
-  basins <- c("E", "W")
-  loess_dat <- lapply(basins, function(b) {
-    form <- as.formula(paste(v, "~ t"))
-    b_dat <- filter(l_tmp, basin == b) %>%
-      mutate(t = as.numeric(date))
-    l_b <- loess(form, data = b_dat, span = t_span)
+  # Loess calculation on recent data
+  loess_ts <- construct_loess(data = tmp, variable = v,
+                              how_far_back = 5, smooth_span = 1.5)
 
-    toi <- as.numeric(seq.POSIXt(date_cutoff - as.difftime(30, units = "mins"),
-                                 by = "month", length.out = 60))
-    out <- data.frame(t = toi,
-                      date = as_datetime(toi, tz = "Etc/GMT-5"),
-                      pred = predict(l_b, newdata = data.frame(t = toi)))
-    out
-  })
-  names(loess_dat) <- paste0(basins, "_loess")
-  loess_ts <- bind_rows(loess_dat, .id = "basin") %>%
-    spread(basin, pred) %>%
-    select(-t)
-
+  # Resume building time series of full data
   tmp <- tmp %>%
     spread(basin, !!v) %>% select(date, E:W) %>%
     bind_rows(loess_ts) %>%
     tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
     xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
-  init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
-  tmp_dy <- dygraph(tmp, group = "water_quality") %>%
-    dyOptions(colors = c("#b2182b", "#b2182b", "#2166ac", "#2166ac"),
-              axisLineWidth = 2, connectSeparatedPoints = TRUE) %>%
-    dySeries("W", label = "West", drawPoints = TRUE, pointSize = 3, pointShape = "square",
-             strokeWidth = 0) %>%
-    dySeries("W_loess", drawPoints = FALSE) %>%
-    dySeries("E", label = "East", drawPoints = TRUE, pointSize = 3, pointShape = "square",
-             strokeWidth = 0) %>%
-    dySeries("E_loess", drawPoints = FALSE) %>%
-    dyAxis("y", label = std$axis) %>%
-    dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
-    dyLegend(show = "follow", width = 200) %>%
-    dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
-    dyCSS("css/matta_wq.css")
-})
+  tmp_dy <- wq_dygraph(tmp, std)
+  })
 
-core_poi_dy <- manipulateWidget::combineWidgets(list = wq_core_dy, ncol = 1)
+core_poi_dy <- manipulateWidget::combineWidgets(list = core_poi_dy, ncol = 1)
 saveWidget(core_poi_dy, "Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
+file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_water_quality_dygraph.html")
 
 ###################################################
 ## NITROGEN SPECIES OF INTEREST
@@ -160,21 +122,19 @@ N_poi <- c("NH3", "NOx", "TKN", "TN", "NP_molar")
 
 N_poi_dy <- lapply(N_poi, function(v) {
   std <- filter(poi_standards, variable == v)
-  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup() %>%
+  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
+
+  # Loess calculation on recent data
+  loess_ts <- construct_loess(data = tmp, variable = v,
+                              how_far_back = 5, smooth_span = 1.5)
+
+  # Resume building time series of full data
+  tmp <- tmp %>%
     spread(basin, !!v) %>% select(date, E:W) %>%
-    tk_xts(tzone = "Etc/GMT-5", select = c(W, E), date_var = date) %>%
+    bind_rows(loess_ts) %>%
+    tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
     xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
-  init_window <- as.character(c(as.POSIXct("2012-05-01 00:00:00"), Sys.time()))
-  tmp_dy <- dygraph(tmp, group = "water_quality") %>%
-    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
-              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
-    dySeries("W", label = "West") %>%
-    dySeries("E", label = "East") %>%
-    dyAxis("y", label = std$axis) %>%
-    dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
-    dyLegend(show = "follow", width = 200) %>%
-    dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
-    dyCSS("css/matta_wq.css")
+  tmp_dy <- wq_dygraph(tmp, std)
 })
 
 N_poi_dy <- manipulateWidget::combineWidgets(list = N_poi_dy, ncol = 1)
@@ -190,21 +150,19 @@ sed_poi <-  c("res_susp_total", "res_susp_fixed", "res_susp_vol",
 
 sed_poi_dy <- lapply(sed_poi, function(v) {
   std <- filter(poi_standards, variable == v)
-  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup() %>%
+  tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
+
+  # Loess calculation on recent data
+  loess_ts <- construct_loess(data = tmp, variable = v,
+                              how_far_back = 5, smooth_span = 1.5)
+
+  # Resume building time series of full data
+  tmp <- tmp %>%
     spread(basin, !!v) %>% select(date, E:W) %>%
-    tk_xts(tzone = "Etc/GMT-5", select = c(W, E), date_var = date) %>%
+    bind_rows(loess_ts) %>%
+    tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
     xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
-  init_window <- as.character(c(as.POSIXct("2012-05-01 00:00:00"), Sys.time()))
-  tmp_dy <- dygraph(tmp, group = "water_quality") %>%
-    dyOptions(colors = c("#b2182b", "#2166ac"), axisLineWidth = 2, connectSeparatedPoints = FALSE,
-              drawPoints = TRUE, pointSize = 3, pointShape = "square", strokeWidth = 0) %>%
-    dySeries("W", label = "West") %>%
-    dySeries("E", label = "East") %>%
-    dyAxis("y", label = std$axis) %>%
-    dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
-    dyLegend(show = "follow", width = 200) %>%
-    dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
-    dyCSS("css/matta_wq.css")
+  tmp_dy <- wq_dygraph(tmp, std)
 })
 
 sed_poi_dy <- manipulateWidget::combineWidgets(list = sed_poi_dy, ncol = 1)
