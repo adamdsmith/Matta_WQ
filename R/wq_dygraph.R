@@ -8,7 +8,7 @@ wq_dygraph <- function(data, std) {
     dySeries("E", label = "East", drawPoints = TRUE, pointSize = 3, pointShape = "square",
              strokeWidth = 0) %>%
     dySeries("E_loess", drawPoints = FALSE) %>%
-    dyAxis("y", label = std$axis) %>%
+    dyAxis("y", label = std$dy_axis) %>%
     dyShading(from = std$min, to = std$max, axis = "y", color = "#addd8e") %>%
     dyLegend(show = "follow", width = 200) %>%
     dyRangeSelector(height = 20, strokeColor = "", dateWindow = init_window) %>%
