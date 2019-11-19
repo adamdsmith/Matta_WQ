@@ -59,30 +59,6 @@ wq <- bind_rows(old, new_lab) %>%
          NP_molar = mgL_M(TN, 14.0067) / mgL_M(TP/1000, 30.973762)) %>%
   arrange(date, basin)
 
-# Create standards and/or label data.frame
-# Note the "fudge factor" on the N:P ratios to make them appear in the dygraphs
-poi_standards <- data.frame(
-  variable = c("chla", "TN", "TP", "res_susp_total", "turbidity", "NP_mass",
-               "NP_molar", "TKN", "NH3", "NOx", "res_susp_vol", "res_susp_fixed",
-               "res_total", "res_total_vol", "res_total_fixed"),
-  axis = c("Chlorophyll<i><sub>a</sub></i><br>(&mu;g/L)",
-           "Total nitrogen<br>(mg/L)",
-           "Total phosphorus<br>(&mu;g/L)",
-           "Susp. solids - total<br>(mg/L)",
-           "Turbidity<br>(NTUs)",
-           "N:P ratio<br>(mass)",
-           "N:P ratio<br>(molar)",
-           "Total Kjeldahl nitrogen<br>(mg/L)",
-           "Ammonia<br>(mg/L)",
-           "Nitrites/Nitrates<br>(mg/L)",
-           "Susp. solids - volatile<br>(mg/L)",
-           "Susp. solids - fixed<br>(mg/L)",
-           "Solids - total<br>(mg/L)",
-           "Solids - total volatile<br>(mg/L)",
-           "Solids - total fixed<br>(mg/L)"),
-  min = c(0, 0.32, 8, 0, 0, 7.15, 15.95, rep(NA, 8)),
-  max = c(40, 0.41, 20, 15, 25, 7.25, 16.05, rep(NA, 8)),
-  stringsAsFactors = FALSE)
 
 # Set initial window of all dygraphs
 init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
