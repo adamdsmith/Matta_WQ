@@ -67,8 +67,10 @@ init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
 ## CORE WATER QUALITY PARAMETERS OF INTEREST (POI)
 ###################################################
 
+# Declare parameters of interest
 core_poi <- c("chla", "turbidity", "TP", "TN", "res_susp_total")
 
+# Interactive dygraph
 core_poi_dy <- lapply(core_poi, function(v) {
   std <- filter(poi_standards, variable == v)
   tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
@@ -100,8 +102,10 @@ dev.off()
 ## NITROGEN SPECIES OF INTEREST
 ###################################################
 
+# Declare parameters of interest
 N_poi <- c("TN", "NH3", "NOx", "TKN", "NP_molar")
 
+# Interactive dygraph
 N_poi_dy <- lapply(N_poi, function(v) {
   std <- filter(poi_standards, variable == v)
   tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
@@ -135,9 +139,11 @@ dev.off()
 ## SEDIMENT SPECIES OF INTEREST
 ###################################################
 
+# Declare parameters of interest
 sed_poi <-  c("res_susp_total", "res_susp_fixed", "res_susp_vol",
               "res_total", "res_total_fixed", "res_total_vol")
 
+# Interactive dygraph
 sed_poi_dy <- lapply(sed_poi, function(v) {
   std <- filter(poi_standards, variable == v)
   tmp <- select(wq, date, basin, rep, !!v) %>% ungroup()
@@ -164,3 +170,4 @@ bp_dat <- format_boxplot_data(wq, sed_poi, poi_standards)
 pdf(file = "./docs/Mattamuskeet_sediment_species_boxplots.pdf", height = 11, width = 8.5, paper = "US")
 (sed_poi_annual_bp <- wq_annual_bp(bp_dat, title = "Mattamuskeet NWR: Sediment water quality parameters (annually since 2012)"))
 (sed_poi_monthly_bp <- wq_monthly_bp(bp_dat, title = "Mattamuskeet NWR: Sediment water quality parameters (monthly since 2012)"))
+dev.off()
