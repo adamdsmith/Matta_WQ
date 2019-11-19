@@ -91,7 +91,7 @@ init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
 ## CORE WATER QUALITY PARAMETERS OF INTEREST (POI)
 ###################################################
 
-core_poi <- c("turbidity", "TP", "TN", "res_susp_total", "chla")
+core_poi <- c("chla", "turbidity", "TP", "TN", "res_susp_total")
 
 core_poi_dy <- lapply(core_poi, function(v) {
   std <- filter(poi_standards, variable == v)
@@ -118,7 +118,7 @@ file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_wate
 ## NITROGEN SPECIES OF INTEREST
 ###################################################
 
-N_poi <- c("NH3", "NOx", "TKN", "TN", "NP_molar")
+N_poi <- c("TN", "NH3", "NOx", "TKN", "NP_molar")
 
 N_poi_dy <- lapply(N_poi, function(v) {
   std <- filter(poi_standards, variable == v)
