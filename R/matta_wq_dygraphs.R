@@ -146,6 +146,9 @@ dev.off()
 # Declare parameters of interest
 sed_poi <-  c("res_total", "res_diss_total", "res_susp_total", "res_susp_fixed", "res_susp_vol")
 
+# Fix y-axis to facilitate comparison across species
+y_range <- range(c(0, wq$res_total), na.rm = TRUE)
+
 # Interactive dygraph
 sed_poi_dy <- lapply(sed_poi, function(v) {
   std <- filter(poi_standards, variable == v)
@@ -161,7 +164,7 @@ sed_poi_dy <- lapply(sed_poi, function(v) {
     bind_rows(loess_ts) %>%
     tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
     xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
-  tmp_dy <- wq_dygraph(tmp, std)
+  tmp_dy <- wq_dygraph(tmp, std, fix_y_range = y_range)
 })
 
 sed_poi_dy <- manipulateWidget::combineWidgets(list = sed_poi_dy, ncol = 1)
