@@ -1,44 +1,49 @@
-wq_annual_bp <- function(data, title) {
-  ggplot(data, aes(year, value)) +
+wq_boxplots <- function(data, title = NULL,
+                        summary = c("annual", "monthly"),
+                        raw = TRUE, grouped = TRUE, fix_y_range = NULL) {
+
+  p_type <- match.arg(summary)
+
+  data <- mutate(data,
+                 x = if(identical(p_type, "annual")) year else month,
+                 col = if(identical(p_type, "annual")) month else year,
+                 group = if(!grouped) x else interaction(x, basin))
+
+  p <- ggplot(data, aes(x, value)) +
+    # THis adds standards
     geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = min, ymax = max), fill = "gray80") +
-    geom_jitter(aes(color = month, group = year), alpha = 0.75, size = 2) +
-    geom_boxplot(aes(group = year), fill = NA) +
-    facet_grid(gg_label ~ basin, scales = "free_y", labeller = label_parsed) +
-    scale_color_gradientn(NULL, colours = cyclic_colors(12),
-                          breaks = 1:12, labels = month.abb) +
-    scale_x_continuous(NULL, breaks = sort(unique(bp_dat$year))) +
-    scale_y_continuous(NULL, limits = c(0, NA)) +
-    ggtitle(title) +
-    theme_bw() +
-    guides(color = guide_colorbar(label.position = "top",
-                                  title.vjust = 0.3)) +
-    theme(legend.position = "top",
-          legend.direction = "horizontal",
-          legend.key.width = unit(2, "cm"),
-          strip.text = element_text(face = "bold"))
+    theme_bw()
+
+  if (raw) {
+    p <- p + geom_point(aes(color = col, group = group),
+                        position = position_jitterdodge(),
+                        alpha = 0.75, size = 2) +
+      guides(color = guide_colorbar(label.position = "top",
+                                    title.vjust = 0.3)) +
+      theme(legend.position = "top",
+            legend.direction = "horizontal",
+            legend.key.width = unit(2, "cm"),
+            strip.text = element_text(face = "bold"))
+    if (identical(p_type, "annual"))
+      p <- p + scale_color_gradientn(NULL, colors = cyclic_colors(12),
+                                     breaks = 1:12, labels = month.abb)
+    else
+      p <- p + scale_color_viridis_c(NULL)
+  }
+
+  p +
+    geom_boxplot(aes(group = group), fill = NA) +
+    facet_grid(rows = vars(gg_label),
+               cols = if(!grouped) vars(basin) else NULL,
+               scales = "free_y", labeller = label_parsed) +
+    scale_x_continuous(NULL, breaks = seq(min(data$x), max(data$x)),
+                       labels = if(identical(p_type, "annual")) waiver() else month.abb[seq(min(data$x), max(data$x))]) +
+    scale_y_continuous(NULL, limits = if(is.null(fix_y_range)) c(0, NA) else fix_y_range) +
+    ggtitle(title)
 }
 
-wq_monthly_bp <- function(data, title) {
-    ggplot(data, aes(month, value)) +
-    geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = min, ymax = max), fill = "gray80") +
-    geom_jitter(aes(color = year, group = month), alpha = 0.75, size = 2) +
-    geom_boxplot(aes(group = month), fill = NA) +
-    facet_grid(gg_label ~ basin, scales = "free_y", labeller = label_parsed) +
-    scale_color_viridis_c(NULL) +
-    scale_x_continuous(NULL, breaks = 1:12, labels = month.abb) +
-    scale_y_continuous(NULL, limits = c(0, NA)) +
-    ggtitle(title) +
-    theme_bw() +
-    guides(color = guide_colorbar(label.position = "top",
-                                  title.vjust = 0.3)) +
-    theme(legend.position = "top",
-          legend.direction = "horizontal",
-          legend.key.width = unit(2, "cm"),
-          strip.text = element_text(face = "bold"))
 
-}
-
-format_boxplot_data <- function(data, variables, standards) {
+format_boxplot_data <- function(data, variables, standards = poi_standards) {
   out <- select(data, date, basin, rep, !!!variables) %>%
     mutate(year = year(date),
            month = month(date)) %>%
