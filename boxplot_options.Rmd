@@ -1,0 +1,165 @@
+---
+title: "Mattamuskeet water quality boxplot options"
+author: "Adam Smith"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    fig_caption: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+# Load required packages
+pacman::p_load(ggplot2, viridis, readr, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
+               htmlwidgets, manipulateWidget)
+source("R/utils.R")
+source("R/wq_boxplots.R")
+
+# Historic samples (1981 - 2017)
+old <-  readxl::read_xlsx("Data/DWR_1981-2017_Surface main and qaqc.xlsx", sheet = "DWRfinal") %>%
+  # Put all samples at midday for convenience...
+  mutate(date = ymd_hm(paste(Date, "12:00"), tz = "Etc/GMT-5"),
+         TP = TP * 1000) %>% # convert to micrograms/L
+  select(date, basin = `Lake side`, chla = starts_with("Chl"),
+         TKN, NH3, NOx, TN, res_susp_total = `Suspended Residue`,
+         res_susp_vol = `Suspended Residue_Volatile`,
+         res_susp_fixed = `Suspended Residue_Fixed`,
+         res_total = `Total Residue`,  res_total_vol = `Total Residue_Volatile`,
+         res_total_fixed = `Total Residue_Fixed`, TP, turbidity = Turbidity) %>%
+  # Calculate total dissolved solids
+  mutate(res_diss_total = res_total - res_susp_total) %>%
+  # Fix "less than, <" values
+  mutate_at(vars(chla:turbidity), adj_lt) %>%
+  # Denote replicate measurements in a basin on a given date
+  group_by(date, basin) %>% mutate(rep = 1:n())
+
+# New ~ annual output format from ISB lab
+# Will need to generalize this when multiple spreadsheets become available...
+new_lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx") %>%
+  select(date = CDAT, basin = LCOD, variable = ACOD, value = ACOM) %>%
+  mutate(basin = ifelse(basin == "0208458892", "W", "E"),
+         date = ymd_hm(paste(date, "12:00"), tz = "Etc/GMT-5"),
+         variable = ifelse(grepl("CHLORO", variable), "chla", variable),
+         # Remove "less than signs" (return half of value) and coerce to numeric
+         # Some records had values like 'X3', etc.
+         value = adj_lt(value),
+         # Convert TP to micrograms/L
+         value = ifelse(variable == "PHOSTOTP_LIQ", value * 1000, value)) %>%
+  group_by(date, basin, variable) %>%
+  mutate(rep = 1:n()) %>%
+  spread(variable, value) %>%
+  mutate(TN = TKNN_LIQ + `NO2&NO3_LIQ`) %>%
+  select(date, basin, chla, TKN = TKNN_LIQ, NH3 = NH3N_LIQ, NOx = `NO2&NO3_LIQ`,
+         TN, res_susp_total = RESSUS_WET, res_susp_vol = RESSUSVOL_WET,
+         res_susp_fixed = RESSUSFIX_WET, res_total = RESTOT_WET,
+         res_total_vol = RESTOTVOL_WET, res_total_fixed = RESTOTFIX_WET,
+         TP = PHOSTOTP_LIQ, turbidity = TURBIDITY, rep) %>%
+  # Calculate total dissolved solids
+  mutate(res_diss_total = res_total - res_susp_total)
+
+# Calculate N:P ratios by mass and molarity
+wq <- bind_rows(old, new_lab) %>%
+  mutate(NP_mass = TN / (TP / 1000),
+         NP_molar = mgL_M(TN, 14.0067) / mgL_M(TP/1000, 30.973762)) %>%
+  arrange(date, basin)
+
+```
+
+Here we demonstrate the various options for generating boxplots of Mattamuskeet water quality parameters. 
+
+## Basic use
+
+Once the necessary functionality and data are loaded (this is documented in other code, but omitted here for clarity), only a few lines of code are necessary to produce a wide range of boxplots.
+
+The first step is to identify which parameters of interest we want boxplots for. We define all three sets of interest here for completeness.
+
+```{r define-pois}
+## CORE WATER QUALITY PARAMETERS OF INTEREST (POI)
+core_poi <- c("chla", "turbidity", "TP", "TN", "res_susp_total")
+
+## NITROGEN SPECIES OF INTEREST
+N_poi <- c("TN", "NH3", "NOx", "TKN", "NP_molar")
+
+## SEDIMENT SPECIES OF INTEREST
+sed_poi <-  c("res_total", "res_diss_total", "res_susp_total", "res_susp_fixed", "res_susp_vol")
+```
+
+With parameters of interest defined, the next step is to transform our raw water quality data, which we've loaded (not shown) into object `wq`, for use in a boxplot using the `format_boxplot_data` function. It requires the raw data and the paramaters of interest object. Here we demonstrate for nitrogen species. We hold this new data set in the `bp_N` object:
+
+```{r make-boxplot-data}
+bp_N <- format_boxplot_data(data = wq, variables = N_poi)
+```
+
+All that's left is to decide on how you want it displayed. The decisions to make are outlined next, and the default option is listed first in all cases:
+
+1. Do you want summary boxplots by year (`summary = "annual"`) or by month (`summary = "monthly"`)?
+1. Do you want to display the raw data behind the boxplots (`raw = TRUE`) or not (`raw = FALSE`)?
+1. Do you want the figure to have no title (`title = NULL`) or a custom title (`title = "Whatever title you want!"`)?
+1. Do you want the west and east basins boxplots side-by-side (`grouped = TRUE`) or in their own facets (`grouped = FALSE`)?
+1. Do you want the y-axis scale to be specific to each variable (`fix_y_range = NULL`) or would you like all variables to have the same y-axis scale (e.g., 0 - 2000 mg/L for sediment; `fix_y_range = c(0, 2000)`)?
+
+Here's the default plot for nitrogen species, an annual summary with raw data, no title, west and east basin measurements in a given year plase side-by-side (west on left, east on right), and an automatically calculated y-axis scale for each nitrogen parameter.
+
+Note that for annual summaries with raw data, the observations are colored by month with a custom cyclic color palette. This (hopefully) makes it easier to quickly assign a point to a season (winter months are pink/purple, spring months are shades of blue [April showers!], summer months are green, and fall months are shades of orange).
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Default boxplot options for nitrogen."}
+wq_boxplots(bp_N)
+```
+
+You can get the same kind of plot, but summarized monthly, by specifying the `summary = "monthly"` argument to the function.
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Default boxplot options for nitrogen, but summarized monthly."}
+wq_boxplots(bp_N, summary = "monthly")
+```
+
+If you'd rather simplify the figure by only showing the boxplots without the raw data, pass the `raw = FALSE` argument:
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Annual nitrogen summary, raw data suppressed."}
+wq_boxplots(bp_N, raw = FALSE)
+```
+
+Nice, but we need a descriptive title. Pass whatever title you want in a character string to the `title` argument:
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Annual nitrogen summary, raw data suppressed, now with a shiny title."}
+wq_boxplots(bp_N, raw = FALSE, 
+            title = "Mattamuskeet NWR: Nitrogen water quality parameters")
+```
+
+If you'd prefer to see the summaries for west and east lake basins separately, rather than side-by-side, then turn off grouping with the `grouped = FALSE` argument:
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Annual nitrogen summary, raw data suppressed, and west and east basin series in their own facets."}
+wq_boxplots(bp_N, raw = FALSE, grouped = FALSE,
+            title = "Mattamuskeet NWR: Nitrogen water quality parameters")
+```
+
+And, lastly, if it makes sense to fix the y-axis scale so you can more easily compare the different species, you can pass a custom y-axis range using the `fix_y_range` argument. 
+
+Let's switch over to sediment species as an example. Total solids comprise the sum of dissolved and suspended solids. Let's put them all on the same scale so we can see which is contributing the most to total solids. Here, we use the maximum total solids measurement ever recorded to set the y-axis scale:
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Annual sediment species summary, with default display options except for a fixed y-axis scale."}
+# First, make the sediment boxplot data
+bp_sed <- format_boxplot_data(data = wq, variables = sed_poi)
+
+# Get the maximum record total solids (res_total variable in `wq` data set) to determine the right y-axis range
+y_range <- range(c(0, wq$res_total), na.rm = TRUE)
+
+# Now make a pretty figure with a fixed y-axis to facilitate comparisons among species
+wq_boxplots(bp_sed, fix_y_range = y_range,
+            title = "Mattamuskeet NWR: Sediment water quality parameters")
+```
+
+In this case, it's clear that dissolved solids are driving total solids.
+
+But this makes it hard to compare fixed vs. volatile suspended solids. We can make that comparison more easily if we make the same figure, but allow each species to have its own y-axis scale:
+
+
+```{r, fig.show='hold', fig.height=8, fig.width=7, fig.cap = "Annual sediment species summary, sediment species-specific y-axis ranges."}
+wq_boxplots(bp_sed, 
+            title = "Mattamuskeet NWR: Sediment water quality parameters")
+```
+
+You can mix and match any of the function arguments to get whichever output you most desire.
+
