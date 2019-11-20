@@ -22,6 +22,8 @@ old <-  readxl::read_xlsx("Data/DWR_1981-2017_Surface main and qaqc.xlsx", sheet
          res_susp_fixed = `Suspended Residue_Fixed`,
          res_total = `Total Residue`,  res_total_vol = `Total Residue_Volatile`,
          res_total_fixed = `Total Residue_Fixed`, TP, turbidity = Turbidity) %>%
+  # Calculate total dissolved solids
+  mutate(res_diss_total = res_total - res_susp_total) %>%
   # Fix "less than, <" values
   mutate_at(vars(chla:turbidity), adj_lt) %>%
   # Denote replicate measurements in a basin on a given date
@@ -47,7 +49,9 @@ new_lab <- readxl::read_xlsx("Data/2018 Lake Mattamuskeet Data from ISB Lab.xlsx
          TN, res_susp_total = RESSUS_WET, res_susp_vol = RESSUSVOL_WET,
          res_susp_fixed = RESSUSFIX_WET, res_total = RESTOT_WET,
          res_total_vol = RESTOTVOL_WET, res_total_fixed = RESTOTFIX_WET,
-         TP = PHOSTOTP_LIQ, turbidity = TURBIDITY, rep)
+         TP = PHOSTOTP_LIQ, turbidity = TURBIDITY, rep) %>%
+  # Calculate total dissolved solids
+  mutate(res_diss_total = res_total - res_susp_total)
 
 # Attempt to flag potentially problematic dates
 # An "empty" data frame result is good
@@ -140,8 +144,7 @@ dev.off()
 ###################################################
 
 # Declare parameters of interest
-sed_poi <-  c("res_susp_total", "res_susp_fixed", "res_susp_vol",
-              "res_total", "res_total_fixed", "res_total_vol")
+sed_poi <-  c("res_total", "res_diss_total", "res_susp_total", "res_susp_fixed", "res_susp_vol")
 
 # Interactive dygraph
 sed_poi_dy <- lapply(sed_poi, function(v) {
