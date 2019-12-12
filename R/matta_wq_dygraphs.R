@@ -2,7 +2,7 @@
 if (!("pacman" %in% installed.packages())) install.packages("pacman", quiet = TRUE)
 if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
 if (!requireNamespace("nrsmisc", quietly = TRUE)) devtools::install_github("adamdsmith/nrsmisc")
-pacman::p_load(ggplot2, viridis, readr, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
+pacman::p_load(ggplot2, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
                htmlwidgets, manipulateWidget)
 
 source("R/utils.R")
@@ -13,7 +13,7 @@ source("R/wq_dygraph.R")
 
 # Historic samples (1981 - 2017)
 old <-  readxl::read_xlsx("Data/DWR_1981-2017_Surface main and qaqc.xlsx", sheet = "DWRfinal") %>%
-  # Put all samples at noon...
+  # Put all samples at midday for convenience...
   mutate(date = ymd_hm(paste(Date, "12:00"), tz = "Etc/GMT-5"),
          TP = TP * 1000) %>% # convert to micrograms/L
   select(date, basin = `Lake side`, chla = starts_with("Chl"),
@@ -63,7 +63,6 @@ wq <- bind_rows(old, new_lab) %>%
          NP_molar = mgL_M(TN, 14.0067) / mgL_M(TP/1000, 30.973762)) %>%
   arrange(date, basin)
 
-
 # Set initial window of all dygraphs
 init_window <- c(max(wq$date) - years(5), max(wq$date) + weeks(1))
 
@@ -88,19 +87,13 @@ core_poi_dy <- lapply(core_poi, function(v) {
     spread(basin, !!v) %>% select(date, E:W) %>%
     bind_rows(loess_ts) %>%
     tk_xts(tzone = "Etc/GMT-5", select = c(W, W_loess, E, E_loess), date_var = date) %>%
-    xts::make.time.unique(eps = 1800) # Arbitrarily space replicates 30 mins apart to visualize
+    # Arbitrarily space same-day replicates 30 mins apart to visualize
+    xts::make.time.unique(eps = 1800)
   tmp_dy <- wq_dygraph(tmp, std)
   })
 core_poi_dy <- manipulateWidget::combineWidgets(list = core_poi_dy, ncol = 1)
 saveWidget(core_poi_dy, "Mattamuskeet_water_quality_dygraph.html", title = "Mattamuskeet Water Quality")
 file.rename("Mattamuskeet_water_quality_dygraph.html", "./docs/Mattamuskeet_water_quality_dygraph.html")
-
-# Boxplots
-bp_dat <- format_boxplot_data(wq, core_poi, poi_standards)
-pdf(file = "./docs/Mattamuskeet_water_quality_boxplots.pdf", height = 11, width = 8.5, paper = "US")
-(core_poi_annual_bp <- wq_annual_bp(bp_dat, title = "Mattamuskeet NWR: Core water quality parameters (annually since 2012)"))
-(core_poi_monthly_bp <- wq_monthly_bp(bp_dat, title = "Mattamuskeet NWR: Core water quality parameters (monthly since 2012)"))
-dev.off()
 
 ###################################################
 ## NITROGEN SPECIES OF INTEREST
@@ -130,14 +123,6 @@ N_poi_dy <- lapply(N_poi, function(v) {
 N_poi_dy <- manipulateWidget::combineWidgets(list = N_poi_dy, ncol = 1)
 saveWidget(N_poi_dy, "Mattamuskeet_N_species_dygraph.html", title = "Mattamuskeet Water Quality - Nitrogen")
 file.rename("Mattamuskeet_N_species_dygraph.html", "./docs/Mattamuskeet_N_species_dygraph.html")
-
-# Boxplots
-bp_dat <- format_boxplot_data(wq, N_poi, poi_standards)
-pdf(file = "./docs/Mattamuskeet_N_species_boxplots.pdf", height = 11, width = 8.5, paper = "US")
-(N_poi_annual_bp <- wq_annual_bp(bp_dat, title = "Mattamuskeet NWR: Nitrogen water quality parameters (annually since 2012)"))
-(N_poi_monthly_bp <- wq_monthly_bp(bp_dat, title = "Mattamuskeet NWR: Nitrogen water quality parameters (monthly since 2012)"))
-dev.off()
-
 
 ###################################################
 ## SEDIMENT SPECIES OF INTEREST
@@ -170,10 +155,3 @@ sed_poi_dy <- lapply(sed_poi, function(v) {
 sed_poi_dy <- manipulateWidget::combineWidgets(list = sed_poi_dy, ncol = 1)
 saveWidget(sed_poi_dy, "Mattamuskeet_sediment_species_dygraph.html", title = "Mattamuskeet Water Quality - Sediment")
 file.rename("Mattamuskeet_sediment_species_dygraph.html", "./docs/Mattamuskeet_sediment_species_dygraph.html")
-
-# Boxplots
-bp_dat <- format_boxplot_data(wq, sed_poi, poi_standards)
-pdf(file = "./docs/Mattamuskeet_sediment_species_boxplots.pdf", height = 11, width = 8.5, paper = "US")
-(sed_poi_annual_bp <- wq_annual_bp(bp_dat, title = "Mattamuskeet NWR: Sediment water quality parameters (annually since 2012)"))
-(sed_poi_monthly_bp <- wq_monthly_bp(bp_dat, title = "Mattamuskeet NWR: Sediment water quality parameters (monthly since 2012)"))
-dev.off()
