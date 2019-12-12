@@ -67,9 +67,10 @@ for (p in poi_groups) { # start parameter grouping loop
   )
   # Format WQ data for this parameter group
   bp_dat <- format_boxplot_data(data = wq, variables = poi)
+
+  # Set up pdf output of all plots by parameter group
   bp_pdf_fn <- paste(c("Mattamuskeet", p, "boxplots.pdf"), collapse = "_")
   bp_pdf_path <- file.path("docs", bp_pdf_fn)
-
   pdf(file = bp_pdf_path, width = 8.5, height = 11, paper = "US")
 
   for (st in sum_types) { # start summary type loop
@@ -77,10 +78,10 @@ for (p in poi_groups) { # start parameter grouping loop
       # Create plot with current summary and raw data options, lake basins in facets
       print(bp <- wq_boxplots(bp_dat, summary = st, raw = r, grouped = FALSE))
       # Create filename describing options
-      # bp_png_fn <- paste0(paste(c("Mattamuskeet", p, st, "boxplot", ifelse(r, "raw", "no_raw")), collapse = "_"),
-      #                 ".png")
-      # bp_png_path <- file.path("docs", bp_png_fn)
-      # ggsave(bp_png_path, plot = bp, height = 9, width = 6.5)
+      bp_png_fn <- paste0(paste(c("Mattamuskeet", p, st, "boxplot", ifelse(r, "raw", "no_raw")), collapse = "_"),
+                      ".png")
+      bp_png_path <- file.path("docs", bp_png_fn)
+      ggsave(bp_png_path, plot = bp, height = 9, width = 6.5)
     } # close raw data display loop
   } # close summary type loop
   dev.off() # Finish pdf creation
