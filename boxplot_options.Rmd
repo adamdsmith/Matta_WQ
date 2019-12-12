@@ -13,8 +13,7 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 # Load required packages
-pacman::p_load(ggplot2, viridis, readr, readxl, dplyr, tidyr, lubridate, timetk, xts, dygraphs,
-               htmlwidgets, manipulateWidget)
+pacman::p_load(ggplot2, readxl, dplyr, tidyr, lubridate)
 source("R/utils.R")
 source("R/wq_boxplots.R")
 
