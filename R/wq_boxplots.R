@@ -11,13 +11,14 @@ wq_boxplots <- function(data, title = NULL,
 
   p <- ggplot(data, aes(x, value)) +
     # THis adds standards
-    geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = min, ymax = max), fill = "gray80") +
-    theme_bw()
+    geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = min, ymax = max), fill = "#66c2a4") +
+    theme_bw(base_size = 12) +
+    theme(axis.text.x = element_text(size = 8))
 
   if (raw) {
     p <- p + geom_point(aes(color = col, group = group),
                         position = position_jitterdodge(),
-                        alpha = 0.75, size = 2) +
+                        alpha = 0.75, size = 1.5) +
       guides(color = guide_colorbar(label.position = "top",
                                     title.vjust = 0.3)) +
       theme(legend.position = "top",
@@ -36,7 +37,8 @@ wq_boxplots <- function(data, title = NULL,
     facet_grid(rows = vars(gg_label),
                cols = if(!grouped) vars(basin) else NULL,
                scales = "free_y", labeller = label_parsed) +
-    scale_x_continuous(NULL, breaks = seq(min(data$x), max(data$x)),
+    scale_x_continuous(NULL,
+                       breaks = if(identical(p_type, "annual")) pretty(seq(min(data$x), max(data$x))) else seq(min(data$x), max(data$x)),
                        labels = if(identical(p_type, "annual")) waiver() else month.abb[seq(min(data$x), max(data$x))]) +
     scale_y_continuous(NULL, limits = if(is.null(fix_y_range)) c(0, NA) else fix_y_range) +
     ggtitle(title)
@@ -44,7 +46,7 @@ wq_boxplots <- function(data, title = NULL,
 
 
 format_boxplot_data <- function(data, variables, standards = poi_standards) {
-  out <- select(data, date, basin, rep, !!!variables) %>%
+  out <- select(data, date, basin, rep, all_of(variables)) %>%
     mutate(year = year(date),
            month = month(date)) %>%
     filter(year > 2010) %>%
